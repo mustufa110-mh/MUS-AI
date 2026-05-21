@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUS AI — Sign in</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: #0a0a0c;
+            color: #e3e3e3;
+            min-height: 100vh;
+        }
+        .robot-glow {
+            filter: drop-shadow(0 0 15px rgba(236, 72, 153, 0.6));
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4 min-h-screen">
+
+    <template id="robot-icon">
+        <svg viewBox="0 0 100 100" class="w-full h-full">
+            <rect x="20" y="30" width="60" height="50" rx="15" fill="#ec4899" />
+            <circle cx="35" cy="50" r="8" fill="#1a1a1a" />
+            <circle cx="65" cy="50" r="8" fill="#1a1a1a" />
+            <path d="M42 62 L58 62 L58 68 L42 68 Z" fill="#1a1a1a" />
+            <rect x="30" y="65" width="40" height="8" rx="4" fill="#333" />
+            <rect x="15" y="45" width="5" height="20" rx="2" fill="#d1d5db" />
+            <rect x="80" y="45" width="5" height="20" rx="2" fill="#d1d5db" />
+            <circle cx="50" cy="28" r="8" fill="#e5e7eb" />
+        </svg>
+    </template>
+
+    <div class="bg-[#1e1f20] w-full max-w-md p-10 rounded-[32px] border border-white/5 text-center space-y-8 shadow-2xl">
+        <div class="w-24 h-24 mx-auto robot-glow" id="login-logo"></div>
+        <div>
+            <h1 class="text-3xl font-bold text-white">Sign in to MUS AI</h1>
+            <p class="text-gray-400 mt-2">Apne Google account se login karein</p>
+        </div>
+
+        <div id="auth-error" class="hidden text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-left"></div>
+        <div id="origin-fix" class="text-xs text-sky-300/95 bg-sky-500/10 border border-sky-500/25 rounded-xl p-3 text-left leading-relaxed space-y-2"></div>
+        <div id="auth-setup" class="hidden text-xs text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-left leading-relaxed"></div>
+
+        <div class="space-y-4">
+            <button type="button" id="google-login-btn"
+                class="w-full py-4 bg-white text-black font-bold rounded-full flex items-center justify-center gap-3 hover:bg-gray-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fab fa-google text-blue-500"></i>
+                <span id="google-btn-label">Continue with Google</span>
+            </button>
+            <p class="text-[11px] text-zinc-500 leading-relaxed">
+                Site ko <strong class="text-zinc-400">http://localhost</strong> par chalayein (file:// par Google login kaam nahi karta).
+            </p>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        const loginLogo = document.getElementById('login-logo');
+        const authError = document.getElementById('auth-error');
+        const authSetup = document.getElementById('auth-setup');
+        const originFix = document.getElementById('origin-fix');
+        const googleBtn = document.getElementById('google-login-btn');
+        const googleBtnLabel = document.getElementById('google-btn-label');
+
+        loginLogo.appendChild(document.getElementById('robot-icon').content.cloneNode(true));
+
+        function showError(msg) {
+            authError.textContent = msg;
+            authError.classList.remove('hidden');
+        }
+
+        function hideError() {
+            authError.classList.add('hidden');
+        }
+
+        function showSetupHelp() {
+            authSetup.innerHTML = `
+                <strong>Setup (ek baar):</strong><br>
+                1. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" class="underline text-amber-300">Google Cloud Console</a> → Credentials<br>
+                2. OAuth client ID → <em>Web application</em> (Desktop/Android nahi)<br>
+                3. Client ID copy karke <code class="text-amber-200">config.js</code> mein paste karein
+            `;
+            authSetup.classList.remove('hidden');
+        }
+
+        function showOriginFix() {
+            const origin = location.origin;
+            const origins = [origin, 'http://localhost:5500', 'http://127.0.0.1:5500']
+                .filter((v, i, a) => a.indexOf(v) === i);
+            originFix.innerHTML = `
+                <strong class="text-sky-200">"no registered origin" fix:</strong>
+                <p>Console → apna <strong>OAuth Web client</strong> kholo → <em>Authorized JavaScript origins</em> mein ye URLs add karo (path /login mat likho):</p>
+                <ul class="list-disc pl-4 space-y-1 font-mono text-[11px] text-white">
+                    ${origins.map(o => `<li>${o}</li>`).join('')}
+                </ul>
+                <p class="text-zinc-400">Save → 2–5 min wait → page refresh → dubara login.</p>
+                <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" class="inline-block underline text-sky-300">Credentials kholo</a>
+            `;
+        }
+
+        function waitForGoogle(callback, attempts = 0) {
+            if (window.google?.accounts?.oauth2) {
+                callback();
+                return;
+            }
+            if (attempts > 60) {
+                showError('Google login script load nahi hui. Internet check karein.');
+                return;
+            }
+            setTimeout(() => waitForGoogle(callback, attempts + 1), 100);
+        }
+
+        async function fetchUserProfile(accessToken) {
+            const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            if (!res.ok) throw new Error('profile');
+            return res.json();
+        }
+
+        function saveSession(profile) {
+            localStorage.setItem('musai_user', JSON.stringify({
+                name: profile.name,
+                email: profile.email,
+                picture: profile.picture,
+                sub: profile.sub
+            }));
+        }
+
+        function signInWithGoogle() {
+            hideError();
+
+            if (!MUSAI_CONFIG.GOOGLE_CLIENT_ID) {
+                showError('Pehle config.js mein GOOGLE_CLIENT_ID set karein.');
+                showSetupHelp();
+                return;
+            }
+
+            if (location.protocol === 'file:') {
+                showError('Google login file:// par kaam nahi karta. VS Code Live Server ya "npx serve" se http://localhost par kholen.');
+                return;
+            }
+
+            googleBtnLabel.textContent = 'Google khul raha hai...';
+            googleBtn.disabled = true;
+
+            waitForGoogle(() => {
+                const client = google.accounts.oauth2.initTokenClient({
+                    client_id: MUSAI_CONFIG.GOOGLE_CLIENT_ID,
+                    scope: 'openid email profile',
+                    callback: async (tokenResponse) => {
+                        googleBtn.disabled = false;
+                        googleBtnLabel.textContent = 'Continue with Google';
+
+                        if (tokenResponse.error) {
+                            if (tokenResponse.error !== 'access_denied') {
+                                showError('Login fail: ' + tokenResponse.error + '. Google Console mein origin register karein (neeche dekhein).');
+                                showOriginFix();
+                            }
+                            return;
+                        }
+
+                        try {
+                            const profile = await fetchUserProfile(tokenResponse.access_token);
+                            saveSession(profile);
+                            window.location.href = 'index.html';
+                        } catch {
+                            showError('Profile load nahi hui. Dubara try karein.');
+                        }
+                    }
+                });
+                client.requestAccessToken();
+            });
+        }
+
+        function init() {
+            const saved = localStorage.getItem('musai_user');
+            if (saved) {
+                window.location.replace('index.html');
+                return;
+            }
+
+            googleBtn.disabled = false;
+            if (!MUSAI_CONFIG.GOOGLE_CLIENT_ID) {
+                showSetupHelp();
+            } else {
+                showOriginFix();
+            }
+
+            googleBtn.addEventListener('click', signInWithGoogle);
+        }
+
+        init();
+    </script>
+</body>
+</html>
