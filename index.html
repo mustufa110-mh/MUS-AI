@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MUS AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --bg-dark: #0a0a0c;
+            --sidebar-bg: #121214;
+            --brand-pink: #d83473;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-dark);
+            color: #e3e3e3;
+            overflow: hidden;
+        }
+
+        .chat-container {
+            height: calc(100vh - 120px);
+            scrollbar-width: none;
+        }
+
+        .robot-glow {
+            filter: drop-shadow(0 0 15px rgba(216, 52, 115, 0.6));
+        }
+
+        .tools-overlay {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            width: 320px;
+            background: #1e1f20;
+            border-radius: 24px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.7);
+            border: 1px solid rgba(255,255,255,0.08);
+            z-index: 200;
+        }
+
+        .tool-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .tool-item:hover {
+            background: rgba(255,255,255,0.06);
+        }
+
+        #history-sidebar {
+            transition: transform 0.3s ease, width 0.3s ease;
+        }
+
+        @media (max-width: 1024px) {
+            #history-sidebar {
+                position: fixed;
+                z-index: 500;
+                height: 100%;
+                transform: translateX(-100%);
+            }
+            #history-sidebar.active {
+                transform: translateX(0);
+            }
+        }
+
+        .shimmer {
+            background: linear-gradient(90deg, #1e1f20 25%, #2a2a2c 50%, #1e1f20 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite linear;
+        }
+        @keyframes shimmer { to { background-position: -200% 0; } }
+    </style>
+</head>
+<body class="flex h-screen relative">
+
+    <!-- Robot SVG Template (Based on uploaded pink robot logo) -->
+    <template id="robot-icon">
+        <svg viewBox="0 0 100 100" class="w-full h-full">
+            <!-- Main Pink Head -->
+            <path d="M20,35 L80,35 Q90,35 90,45 L90,75 Q90,85 80,85 L20,85 Q10,85 10,75 L10,45 Q10,35 20,35 Z" fill="#d83473" />
+            <!-- Eyes -->
+            <circle cx="35" cy="55" r="12" fill="#1a1a1a" />
+            <circle cx="65" cy="55" r="12" fill="#1a1a1a" />
+            <!-- Nose -->
+            <path d="M50,60 L56,72 L44,72 Z" fill="#f0f0f0" />
+            <!-- Mouth / Grill -->
+            <rect x="35" y="78" width="30" height="4" rx="2" fill="#1a1a1a" />
+            <!-- Antennas -->
+            <rect x="15" y="15" width="4" height="25" rx="2" fill="#d83473" />
+            <rect x="81" y="15" width="4" height="25" rx="2" fill="#d83473" />
+            <!-- Side Ear Elements -->
+            <path d="M10,45 Q0,55 0,65 Q0,75 10,85" fill="#e2e8f0" stroke="#d1d5db" stroke-width="1" />
+            <path d="M90,45 Q100,55 100,65 Q100,75 90,85" fill="#e2e8f0" stroke="#d1d5db" stroke-width="1" />
+            <!-- Top Cap -->
+            <path d="M35,35 Q50,25 65,35 Z" fill="#f0f0f0" />
+        </svg>
+    </template>
+
+    <!-- Sidebar -->
+    <aside id="history-sidebar" class="w-[280px] bg-sidebar-bg flex flex-col p-4 border-r border-white/5 shadow-2xl overflow-hidden">
+        <div class="flex items-center justify-between mb-8 px-2">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 robot-glow" id="sidebar-logo"></div>
+                <span class="font-bold text-xl text-white">MUS AI</span>
+            </div>
+            <button onclick="toggleSidebar()" class="lg:hidden text-gray-500 hover:text-white"><i class="fas fa-times"></i></button>
+        </div>
+        
+        <button onclick="newChat()" class="flex items-center gap-3 px-5 py-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-full text-sm text-gray-200 transition-all mb-6">
+            <i class="fas fa-plus text-pink-500"></i> Nayi Baatcheet
+        </button>
+
+        <div id="history-list" class="flex-1 overflow-y-auto space-y-1">
+            <p class="text-[11px] font-bold text-gray-500 px-4 mb-3 uppercase tracking-widest">HISTORY</p>
+            <div id="history-items">
+                <div class="px-4 py-2 text-xs text-zinc-600 italic">Abhi tak koi chat nahi hai</div>
+            </div>
+        </div>
+
+        <div class="pt-4 border-t border-white/5 space-y-1">
+            <div class="relative group">
+                <button class="w-full flex items-center justify-between p-3 hover:bg-white/5 rounded-xl text-sm text-gray-400">
+                    <span class="flex items-center gap-3"><i class="fas fa-globe"></i> Bhasha (Language)</span>
+                    <i class="fas fa-chevron-right text-[10px]"></i>
+                </button>
+                <div class="hidden group-hover:block absolute bottom-full left-0 w-full bg-[#2a2a2c] rounded-xl border border-white/10 p-2 shadow-2xl mb-2">
+                    <button onclick="changeLang('hi')" class="w-full text-left p-2 hover:bg-white/5 rounded-lg text-xs">Hindi</button>
+                    <button onclick="changeLang('en')" class="w-full text-left p-2 hover:bg-white/5 rounded-lg text-xs">English</button>
+                </div>
+            </div>
+            <button onclick="newChat()" class="w-full flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl text-sm text-gray-400">
+                <i class="fas fa-trash-alt"></i> Chat Saaf Karein
+            </button>
+            <button type="button" onclick="logout()" class="w-full flex items-center gap-3 p-3 hover:bg-white/5 rounded-xl text-sm text-gray-400">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col relative w-full overflow-hidden">
+        
+        <header class="p-4 flex justify-between items-center px-6">
+            <div class="flex items-center gap-4">
+                <button onclick="toggleSidebar()" class="text-gray-400 p-2 hover:bg-white/5 rounded-full transition-all">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+                <div class="text-sm text-gray-400 font-medium">MUS AI Pro</div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="user-display-name" class="hidden md:block text-sm text-gray-400 truncate max-w-[140px]"></span>
+                <div class="w-9 h-9 rounded-full overflow-hidden border border-white/10 shrink-0">
+                    <img id="user-avatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=UserMUS" alt="User">
+                </div>
+            </div>
+        </header>
+
+        <main id="chatWindow" class="chat-container flex-1 overflow-y-auto p-4 md:p-20 space-y-10 scroll-smooth">
+            <div id="hero" class="flex flex-col items-center justify-center h-full text-center space-y-8 max-w-4xl mx-auto">
+                <!-- Glowing Pink Robot Icon -->
+                <div class="w-20 h-20 robot-glow mx-auto" id="hero-logo"></div>
+                
+                <div class="space-y-4">
+                    <h1 class="text-5xl md:text-6xl font-black text-white tracking-tight">MUS AI</h1>
+                    <p class="text-xl md:text-2xl text-gray-400 font-medium leading-relaxed max-w-2xl mx-auto">
+                        Main ek powerful AI assistant hoon. Aaj main aapki kya madad kar sakta hoon?
+                    </p>
+                </div>
+                
+                <!-- Premium Tools Grid Dashboard (Based on image_332e4f.png) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-3xl mt-8">
+                    <!-- Build a Report -->
+                    <button onclick="quickCommand('Build a Report')" class="p-5 bg-[#121214] border border-zinc-800/40 hover:border-blue-500/40 rounded-2xl text-left transition-all hover:scale-[1.01] active:scale-95 duration-200 group flex flex-col justify-between h-32">
+                        <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+                            <i class="fas fa-file-alt text-lg"></i>
+                        </div>
+                        <span class="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors">Build a Report</span>
+                    </button>
+                    
+                    <!-- Explain Logic -->
+                    <button onclick="quickCommand('Explain Logic')" class="p-5 bg-[#121214] border border-zinc-800/40 hover:border-purple-500/40 rounded-2xl text-left transition-all hover:scale-[1.01] active:scale-95 duration-200 group flex flex-col justify-between h-32">
+                        <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
+                            <i class="fas fa-brain text-lg"></i>
+                        </div>
+                        <span class="text-lg font-semibold text-white group-hover:text-purple-400 transition-colors">Explain Logic</span>
+                    </button>
+                    
+                    <!-- Creative Art -->
+                    <button onclick="quickCommand('Creative Art')" class="p-5 bg-[#121214] border border-zinc-800/40 hover:border-pink-500/40 rounded-2xl text-left transition-all hover:scale-[1.01] active:scale-95 duration-200 group flex flex-col justify-between h-32">
+                        <div class="w-10 h-10 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-500">
+                            <i class="fas fa-palette text-lg"></i>
+                        </div>
+                        <span class="text-lg font-semibold text-white group-hover:text-pink-400 transition-colors">Creative Art</span>
+                    </button>
+                    
+                    <!-- Code Mastery -->
+                    <button onclick="quickCommand('Code Mastery')" class="p-5 bg-[#121214] border border-zinc-800/40 hover:border-green-500/40 rounded-2xl text-left transition-all hover:scale-[1.01] active:scale-95 duration-200 group flex flex-col justify-between h-32">
+                        <div class="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center text-green-500">
+                            <i class="fas fa-code text-lg"></i>
+                        </div>
+                        <span class="text-lg font-semibold text-white group-hover:text-green-400 transition-colors">Code Mastery</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Input Area -->
+        <footer class="p-4 md:p-8">
+            <div class="max-w-4xl mx-auto relative">
+                
+                <div id="gemini-menu" class="tools-overlay">
+                    <p class="text-[11px] font-bold text-zinc-500 px-3 py-2 uppercase tracking-widest">Tools & More</p>
+                    <div class="tool-item" onclick="useExtension('Google Search')">
+                        <div class="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-500 flex items-center justify-center"><i class="fas fa-search text-xs"></i></div>
+                        <span class="text-sm">Search Karein</span>
+                    </div>
+                    <div class="tool-item" onclick="document.getElementById('file-input').click()">
+                        <div class="w-8 h-8 rounded-lg bg-pink-500/20 text-pink-500 flex items-center justify-center"><i class="fas fa-image text-xs"></i></div>
+                        <span class="text-sm">Image Upload</span>
+                    </div>
+                </div>
+
+                <div class="bg-[#1e1f20] rounded-[32px] border border-white/5 p-2 shadow-2xl relative">
+                    <div id="img-preview-box" class="hidden absolute bottom-[110%] left-4 p-2 bg-zinc-800 rounded-2xl border border-white/10">
+                        <img id="img-preview" src="" class="h-20 w-20 object-cover rounded-xl">
+                        <button onclick="removeImage()" class="absolute -top-2 -right-2 bg-red-600 w-5 h-5 rounded-full text-[10px] flex items-center justify-center"><i class="fas fa-times"></i></button>
+                    </div>
+
+                    <div class="flex items-center px-4">
+                        <button onclick="toggleMenu(event)" id="plusBtn" class="w-10 h-10 flex items-center justify-center text-zinc-400 hover:text-pink-600 transition-all">
+                            <i class="fas fa-plus text-xl"></i>
+                        </button>
+                        
+                        <textarea id="userInput" rows="1" placeholder="Kuch bhi poochiye..." 
+                            class="flex-1 bg-transparent border-none focus:ring-0 py-4 px-4 text-gray-200 text-lg resize-none"
+                            oninput="this.style.height = '';this.style.height = this.scrollHeight + 'px'"></textarea>
+
+                        <button onclick="sendMessage()" id="sendBtn" class="w-10 h-10 flex items-center justify-center bg-white text-black rounded-full hover:bg-gray-200 transition-all">
+                            <i class="fas fa-arrow-up"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </footer>
+        
+        <input type="file" id="file-input" accept="image/*" class="hidden" onchange="handleImage(this)">
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        let currentUser = null;
+        try {
+            currentUser = JSON.parse(localStorage.getItem('musai_user'));
+        } catch {
+            currentUser = null;
+        }
+        if (!currentUser) {
+            window.location.replace('login.html');
+        }
+
+        const apiKey = MUSAI_CONFIG?.GEMINI_API_KEY || "AIzaSyDE28ESIlCbRvD3EcrV1TzCbQtOYKun0RQ";
+        if (!apiKey) {
+            console.error("config.js mein GEMINI_API_KEY set karein");
+        }
+        const chatWindow = document.getElementById('chatWindow');
+        const userInput = document.getElementById('userInput');
+        const sidebar = document.getElementById('history-sidebar');
+        const menuOverlay = document.getElementById('gemini-menu');
+        const hero = document.getElementById('hero');
+        const historyItems = document.getElementById('history-items');
+        
+        let base64Image = null;
+        let isFirstMessage = true;
+
+        function initLogos() {
+            const template = document.getElementById('robot-icon').content;
+            document.getElementById('sidebar-logo').innerHTML = '';
+            document.getElementById('sidebar-logo').appendChild(template.cloneNode(true));
+            document.getElementById('hero-logo').innerHTML = '';
+            document.getElementById('hero-logo').appendChild(template.cloneNode(true));
+        }
+        initLogos();
+        applyUserToUI(currentUser);
+
+        function applyUserToUI(user) {
+            if (!user) return;
+            const img = document.getElementById('user-avatar');
+            if (img && user.picture) {
+                img.src = user.picture;
+                img.alt = user.name || 'User';
+            }
+            const nameEl = document.getElementById('user-display-name');
+            if (nameEl && user.name) {
+                nameEl.textContent = user.name.split(' ')[0];
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('musai_user');
+            window.location.href = 'login.html';
+        }
+        
+        function toggleSidebar() {
+            sidebar.classList.toggle('active');
+        }
+
+        document.addEventListener('click', (e) => {
+            const sidebar = document.getElementById('history-sidebar');
+            const hamburgerBtn = document.querySelector('header button');
+            if (window.innerWidth <= 1024 && !sidebar.contains(e.target) && !hamburgerBtn.contains(e.target)) {
+                sidebar.classList.remove('active');
+            }
+        });
+
+        function toggleMenu(e) {
+            e.stopPropagation();
+            menuOverlay.style.display = menuOverlay.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function changeLang(l) {
+            document.documentElement.lang = l;
+            userInput.placeholder = l === 'hi' ? "Kuch bhi poochiye..." : "Ask anything...";
+        }
+
+        function quickCommand(cmd) {
+            userInput.value = cmd;
+            sendMessage();
+        }
+
+        function handleImage(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                base64Image = e.target.result.split(',')[1];
+                document.getElementById('img-preview').src = e.target.result;
+                document.getElementById('img-preview-box').classList.remove('hidden');
+                menuOverlay.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeImage() {
+            base64Image = null;
+            document.getElementById('img-preview-box').classList.add('hidden');
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text && !base64Image) return;
+
+            if (hero) hero.style.display = 'none';
+            if (isFirstMessage) {
+                isFirstMessage = false;
+                historyItems.innerHTML = '';
+                const item = document.createElement('div');
+                item.className = 'mx-2 p-3 hover:bg-white/5 rounded-xl text-sm text-gray-400 cursor-pointer truncate flex items-center gap-3';
+                item.innerHTML = `<i class="far fa-comment"></i> ${text || 'Chat Session'}`;
+                historyItems.prepend(item);
+            }
+
+            appendMessage('user', text, base64Image);
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            setLoading(true);
+
+            try {
+                const model = MUSAI_CONFIG?.GEMINI_MODEL || 'gemini-2.5-flash';
+                const parts = [];
+                if (text) parts.push({ text });
+                if (base64Image) {
+                    parts.push({
+                        inline_data: {
+                            mime_type: 'image/jpeg',
+                            data: base64Image
+                        }
+                    });
+                    if (!text) parts.unshift({ text: 'Is image ka analysis karein.' });
+                }
+
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts }],
+                            systemInstruction: {
+                                parts: [{
+                                    text: 'Aap MUS AI hain. Aapka logo ek pink robot hai. Professional assistant baniye. Hindi aur English ka mix use karein.'
+                                }]
+                            }
+                        })
+                    }
+                );
+
+                const data = await response.json();
+                if (!response.ok || data.error) {
+                    const msg = data.error?.message || `API error (${response.status})`;
+                    appendMessage('ai', 'Maaf kijiye, jawab nahi mila: ' + msg);
+                    return;
+                }
+                const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!reply) {
+                    appendMessage('ai', 'Maaf kijiye, khali jawab aaya. Dubara try karein.');
+                    return;
+                }
+                appendMessage('ai', reply);
+            } catch (err) {
+                appendMessage('ai', 'Maaf kijiye, connection mein problem hai. Internet check karein.');
+            } finally {
+                removeImage();
+                setLoading(false);
+            }
+        }
+
+        function appendMessage(role, text, b64) {
+            const div = document.createElement('div');
+            div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-8`;
+            const template = document.getElementById('robot-icon').content;
+            const logoClone = template.cloneNode(true);
+
+            div.innerHTML = `
+                <div class="flex items-start gap-4 max-w-[90%] md:max-w-[80%]">
+                    ${role === 'ai' ? `<div class="w-9 h-9 min-w-[36px] mt-1 robot-glow">${new XMLSerializer().serializeToString(logoClone)}</div>` : ''}
+                    <div class="${role === 'user' ? 'bg-[#2b2b2b] p-4 rounded-2xl' : 'w-full'}">
+                        ${b64 ? `<img src="data:image/png;base64,${b64}" class="w-72 rounded-xl mb-4 border border-white/5">` : ''}
+                        <div class="prose prose-invert leading-relaxed text-gray-200">${formatText(text)}</div>
+                    </div>
+                </div>
+            `;
+            chatWindow.appendChild(div);
+            chatWindow.scrollTo({ top: chatWindow.scrollHeight, behavior: 'smooth' });
+        }
+
+        function formatText(t) {
+            return t.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+        }
+
+        function setLoading(l) {
+            if (l) {
+                const s = document.createElement('div');
+                s.id = 'loader';
+                s.className = 'flex gap-4 p-4 opacity-50';
+                s.innerHTML = `<div class="w-9 h-9 bg-zinc-800 rounded-lg"></div><div class="space-y-2 flex-1"><div class="h-2 shimmer rounded-full w-1/4"></div><div class="h-2 shimmer rounded-full w-1/2"></div></div>`;
+                chatWindow.appendChild(s);
+            } else {
+                const s = document.getElementById('loader');
+                if (s) s.remove();
+            }
+        }
+
+        document.addEventListener('click', () => menuOverlay.style.display = 'none');
+        userInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+    </script>
+</body>
+</html>
